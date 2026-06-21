@@ -9,10 +9,11 @@ const { checkListingBookable } = require("../utils/listingEligibility");
 const hasRealRazorpayKeys = () =>
   Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 
-// Dev-only simulated payments are only ever allowed when no real keys are configured
-// AND we are not in production — this never silently bypasses payment in a real deployment.
+// Dev-only simulated payments require an explicit NODE_ENV=development AND no real
+// keys configured. Fail-closed on the env check: an unset/misconfigured NODE_ENV in
+// a real deployment must never silently enable a payment bypass.
 const isDevSimulationAllowed = () =>
-  process.env.NODE_ENV !== "production" && !hasRealRazorpayKeys();
+  process.env.NODE_ENV === "development" && !hasRealRazorpayKeys();
 
 const getRazorpayInstance = () => {
   return new Razorpay({

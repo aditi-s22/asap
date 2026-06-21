@@ -97,7 +97,10 @@ app.use((req, res, next) => {
 // from their own machine) skips rate limiting entirely via `skip` — this disables
 // counting/blocking outright rather than just raising the ceiling, so local testing
 // can never trip a "Too many requests" error regardless of request volume.
-const isDevEnv = process.env.NODE_ENV !== "production";
+// Fail-closed: only an explicit NODE_ENV=development relaxes anything. If NODE_ENV
+// is unset or anything else (a deployment forgetting to set it), this resolves to
+// production-safe behavior instead of silently disabling rate limiting.
+const isDevEnv = process.env.NODE_ENV === "development";
 const isLocalRequest = (req) => {
   const ip = req.ip || req.connection?.remoteAddress || "";
   return ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip);

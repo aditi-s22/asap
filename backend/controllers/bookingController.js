@@ -12,7 +12,7 @@ const autoCancelUnpaidBookings = async () => {
       {
         paymentStatus: "pending",
         createdAt: { $lt: tenMinutesAgo },
-        status: "booked"
+        status: "pending"
       },
       {
         $set: { status: "cancelled" }
@@ -84,6 +84,14 @@ exports.createBooking = async (req, res) => {
           if (overlappingCount >= maxSlots) {
             throw new Error("NO_SLOTS_AVAILABLE");
           }
+          // Count-then-insert alone can't be raced out: two concurrent transactions each
+          // insert their own independent Booking document, so MongoDB never sees a
+          // write-write conflict between them and both can pass the count check for the
+          // last slot. Touching the same Parking document inside the transaction gives
+          // concurrent attempts on this listing a real shared write to conflict over —
+          // one aborts with a TransientTransactionError, which withTransaction retries
+          // automatically against a fresh (now-accurate) overlap count.
+          await Parking.updateOne({ _id: parkingId }, { $inc: { totalBookings: 1 } }, { session });
           // Model.create() treats a single plain-object first argument as varargs, not a doc — must use array form to pass { session }.
           [booking] = await Booking.create([{ userId, parkingId, startTime: start, endTime: end, totalPrice }], { session });
         });
@@ -379,7 +387,7 @@ exports.extendBooking = async (req, res) => {
     const maxSlots = booking.parkingId.totalSlots || booking.parkingId.slots || 1;
     const overlapFilter = {
       parkingId: booking.parkingId._id,
-      status: { $in: ["booked", "paid", "checked_in", "active"] },
+      status: { $in: ["pending", "paid", "checked_in", "active"] },
       _id: { $ne: booking._id },
       startTime: { $lt: newEnd },
       endTime: { $gt: currentEnd }

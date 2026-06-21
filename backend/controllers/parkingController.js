@@ -45,7 +45,8 @@ exports.addParking = async (req, res) => {
 // GET ALL PARKING
 exports.getAllParking = async (req, res) => {
   try {
-    const parkings = await Parking.find({ isActive: true, isApproved: true }).populate("hostId", "name email phone verifiedHost");
+    // Public endpoint, no auth — never expose host email/phone here.
+    const parkings = await Parking.find({ isActive: true, isApproved: true }).populate("hostId", "name verifiedHost");
     res.json(parkings);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -55,7 +56,8 @@ exports.getAllParking = async (req, res) => {
 // GET PARKING BY ID
 exports.getParkingById = async (req, res) => {
   try {
-    const parking = await Parking.findById(req.params.id).populate("hostId", "name email phone verifiedHost");
+    // Public endpoint, no auth — never expose host email/phone here.
+    const parking = await Parking.findById(req.params.id).populate("hostId", "name verifiedHost");
     if (!parking) return res.status(404).json({ message: "Parking not found" });
     res.json(parking);
   } catch (error) {
