@@ -1,4 +1,4 @@
-# ASAP Parking 🚀
+# ASAP 🚀
 > Premium Real-time Peer-to-Peer Parking Marketplace
 
 ASAP Parking transforms empty driveways, garages, and commercial spaces into active, bookable parking nodes. Drivers can search, book, pay, and check-in via QR codes in real-time, while hosts monetize idle property space with full operational dashboard controls.
