@@ -20,10 +20,11 @@ const generateRefreshToken = (userId) =>
   jwt.sign({ id: userId }, getRefreshSecret(), { expiresIn: REFRESH_TOKEN_TTL });
 
 const setRefreshCookie = (res, refreshToken) => {
+  const isProd = process.env.NODE_ENV === "production";
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     maxAge: REFRESH_COOKIE_MAX_AGE,
     path: "/api/auth"
   });
@@ -174,6 +175,12 @@ exports.refreshAccessToken = async (req, res) => {
 
 // LOGOUT (clears the refresh cookie)
 exports.logout = async (req, res) => {
-  res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    path: "/api/auth",
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax"
+  });
   res.json({ message: "Logged out successfully" });
 };

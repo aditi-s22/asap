@@ -45,7 +45,8 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const rawFrontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND_URL = rawFrontendUrl.endsWith("/") ? rawFrontendUrl.slice(0, -1) : rawFrontendUrl;
 
 // Minimal cookie parser (avoids adding a dependency just to read one refresh-token cookie).
 const parseCookies = (req) => {
