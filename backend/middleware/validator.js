@@ -72,10 +72,6 @@ const validate = (rules) => {
 
 // Common Schemas
 const schemas = {
-  login: {
-    email: { required: true, type: "string", regex: /^\S+@\S+\.\S+$/ },
-    password: { required: true, type: "string" }
-  },
   signup: {
     name: { required: true, type: "string" },
     email: { required: true, type: "string", regex: /^\S+@\S+\.\S+$/ },

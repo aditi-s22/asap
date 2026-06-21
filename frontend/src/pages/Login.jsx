@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import { exchangeFirebaseToken, loginUser } from '../services/api';
+import { exchangeFirebaseToken } from '../services/api';
 import { signInWithEmail, signInWithGoogle } from '../services/firebase';
 import { AuthContext } from '../context/AuthContext';
 
@@ -22,14 +22,8 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      let res;
-      try {
-        const { idToken } = await signInWithEmail(email, password);
-        res = await exchangeFirebaseToken(idToken);
-      } catch (firebaseErr) {
-        console.warn("Firebase authentication failed, attempting direct database login:", firebaseErr);
-        res = await loginUser(email, password);
-      }
+      const { idToken } = await signInWithEmail(email, password);
+      const res = await exchangeFirebaseToken(idToken);
       login(res.data.token, res.data.user);
       navigate('/');
     } catch (err) {

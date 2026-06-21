@@ -52,7 +52,6 @@ api.interceptors.response.use(
 // Auth APIs — every sign-in method (email/password, phone, Google) ends with Firebase
 // issuing an ID token, which this single endpoint exchanges for our app session.
 export const exchangeFirebaseToken = (idToken, extra = {}) => api.post('/auth/firebase-session', { idToken, ...extra });
-export const loginUser = (email, password) => api.post('/auth/login', { email, password });
 export const refreshAccessToken = () => api.post('/auth/refresh');
 export const logoutUser = () => api.post('/auth/logout');
 

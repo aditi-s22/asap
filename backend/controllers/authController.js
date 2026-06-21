@@ -177,28 +177,3 @@ exports.logout = async (req, res) => {
   res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
   res.json({ message: "Logged out successfully" });
 };
-
-// DEV/TEST LOGIN BYPASS (authenticates users directly in development)
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-    }
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    if (!user.isActive) {
-      return res.status(403).json({ message: "Your de-activated account is locked." });
-    }
-
-    const accessToken = issueSession(res, user);
-    res.json({
-      token: accessToken,
-      user: sanitizeUser(user)
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
