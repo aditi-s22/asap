@@ -44,6 +44,21 @@ ASAP/
 ```
 
 ---
+## Deployment
+
+- Frontend: Vercel
+- Backend: Render
+- Database: MongoDB Atlas
+
+## Status
+
+ASAP Parking currently supports:
+- Real-time parking discovery
+- Booking lifecycle management
+- QR-based check-in
+- Host earnings analytics
+- Driver reviews and ratings
+- Real-time notifications
 
 ## ⚙️ Environment Variables
 
