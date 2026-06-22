@@ -32,7 +32,7 @@ export default function Signup() {
     try {
       const { idToken, emailVerified } = await signUpWithEmail(email, password);
       const res = await exchangeFirebaseToken(idToken, { name, phone });
-      login(res.data.token, res.data.user);
+      login(res.data.token, res.data.user, res.data.refreshToken);
       if (!emailVerified) {
         setInfoMessage("We've sent a verification link to your email — you're signed in now, but check your inbox to verify your address.");
       }
@@ -50,7 +50,7 @@ export default function Signup() {
     try {
       const { idToken } = await signInWithGoogle();
       const res = await exchangeFirebaseToken(idToken);
-      login(res.data.token, res.data.user);
+      login(res.data.token, res.data.user, res.data.refreshToken);
       navigate('/');
     } catch (err) {
       console.error(err);

@@ -24,7 +24,7 @@ export default function Login() {
     try {
       const { idToken } = await signInWithEmail(email, password);
       const res = await exchangeFirebaseToken(idToken);
-      login(res.data.token, res.data.user);
+      login(res.data.token, res.data.user, res.data.refreshToken);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Login failed. Please check your credentials.');
@@ -39,7 +39,7 @@ export default function Login() {
     try {
       const { idToken } = await signInWithGoogle();
       const res = await exchangeFirebaseToken(idToken);
-      login(res.data.token, res.data.user);
+      login(res.data.token, res.data.user, res.data.refreshToken);
       navigate('/');
     } catch (err) {
       console.error(err);

@@ -10,22 +10,28 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     setOnSessionExpired(() => {
       localStorage.removeItem('asap_user');
+      localStorage.removeItem('asap_refresh_token');
       setAuthToken(null);
       setUser(null);
     });
 
-    // The access token is never persisted to localStorage (it's short-lived and kept in
-    // memory only). On load, use the httpOnly refresh cookie to silently re-establish
+    // The access token is never persisted to localStorage. On load, use the stored
+    // refresh token (as fallback) or httpOnly refresh cookie to silently re-establish
     // the session — this is what survives a page reload or browser restart.
     const bootstrapSession = async () => {
       try {
-        const res = await refreshAccessToken();
+        const storedRefresh = localStorage.getItem('asap_refresh_token');
+        const res = await refreshAccessToken(storedRefresh);
+        if (res.data.refreshToken) {
+          localStorage.setItem('asap_refresh_token', res.data.refreshToken);
+        }
         setAuthToken(res.data.token);
         setUser(res.data.user);
         localStorage.setItem('asap_user', JSON.stringify(res.data.user));
       } catch {
         setAuthToken(null);
         localStorage.removeItem('asap_user');
+        localStorage.removeItem('asap_refresh_token');
         setUser(null);
       } finally {
         setLoading(false);
@@ -37,8 +43,11 @@ export const AuthProvider = ({ children }) => {
 
   // Used right after login/register/google-auth, where the server has just issued a
   // fresh access token + set the refresh cookie.
-  const login = (token, userData) => {
+  const login = (token, userData, refreshToken) => {
     localStorage.setItem('asap_user', JSON.stringify(userData));
+    if (refreshToken) {
+      localStorage.setItem('asap_refresh_token', refreshToken);
+    }
     setAuthToken(token);
     setUser(userData);
   };
@@ -57,6 +66,7 @@ export const AuthProvider = ({ children }) => {
       // Clear local state regardless of whether the network call succeeds.
     }
     localStorage.removeItem('asap_user');
+    localStorage.removeItem('asap_refresh_token');
     setAuthToken(null);
     setUser(null);
   };

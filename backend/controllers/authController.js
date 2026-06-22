@@ -33,8 +33,10 @@ const setRefreshCookie = (res, refreshToken) => {
 // Issues a fresh access + refresh token pair, setting the refresh token as an httpOnly
 // cookie and returning only the access token for the client to hold in memory.
 const issueSession = (res, user) => {
-  setRefreshCookie(res, generateRefreshToken(user._id));
-  return generateAccessToken(user._id);
+  const refreshToken = generateRefreshToken(user._id);
+  setRefreshCookie(res, refreshToken);
+  const accessToken = generateAccessToken(user._id);
+  return { accessToken, refreshToken };
 };
 
 const sanitizeUser = (user) => ({
@@ -132,10 +134,11 @@ exports.firebaseSession = async (req, res) => {
       return res.status(403).json({ message: "Your account is deactivated. Please contact support." });
     }
 
-    const accessToken = issueSession(res, user);
+    const { accessToken, refreshToken } = issueSession(res, user);
 
     res.json({
       token: accessToken,
+      refreshToken,
       user: sanitizeUser(user)
     });
   } catch (error) {
@@ -143,10 +146,20 @@ exports.firebaseSession = async (req, res) => {
   }
 };
 
-// REFRESH ACCESS TOKEN (reads the httpOnly refresh cookie)
+// REFRESH ACCESS TOKEN (reads the httpOnly refresh cookie or Authorization/x-refresh-token headers)
 exports.refreshAccessToken = async (req, res) => {
   try {
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    let refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    if (!refreshToken) {
+      // Fallback: check Authorization header or x-refresh-token header
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        refreshToken = authHeader.split(" ")[1];
+      } else {
+        refreshToken = req.headers["x-refresh-token"];
+      }
+    }
+
     if (!refreshToken) {
       return res.status(401).json({ message: "No refresh token provided" });
     }
@@ -167,7 +180,14 @@ exports.refreshAccessToken = async (req, res) => {
     }
 
     const accessToken = generateAccessToken(user._id);
-    res.json({ token: accessToken, user: sanitizeUser(user) });
+    const newRefreshToken = generateRefreshToken(user._id);
+    setRefreshCookie(res, newRefreshToken);
+
+    res.json({
+      token: accessToken,
+      refreshToken: newRefreshToken,
+      user: sanitizeUser(user)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

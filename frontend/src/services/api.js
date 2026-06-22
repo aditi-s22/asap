@@ -32,11 +32,15 @@ api.interceptors.response.use(
       config._retried = true;
       try {
         if (!refreshPromise) {
-          refreshPromise = api.post('/auth/refresh').finally(() => {
+          const storedRefresh = localStorage.getItem('asap_refresh_token');
+          refreshPromise = refreshAccessToken(storedRefresh).finally(() => {
             refreshPromise = null;
           });
         }
         const refreshRes = await refreshPromise;
+        if (refreshRes.data.refreshToken) {
+          localStorage.setItem('asap_refresh_token', refreshRes.data.refreshToken);
+        }
         setAuthToken(refreshRes.data.token);
         config.headers['Authorization'] = `Bearer ${refreshRes.data.token}`;
         return api(config);
@@ -52,7 +56,13 @@ api.interceptors.response.use(
 // Auth APIs — every sign-in method (email/password, phone, Google) ends with Firebase
 // issuing an ID token, which this single endpoint exchanges for our app session.
 export const exchangeFirebaseToken = (idToken, extra = {}) => api.post('/auth/firebase-session', { idToken, ...extra });
-export const refreshAccessToken = () => api.post('/auth/refresh');
+export const refreshAccessToken = (refreshToken) => {
+  const headers = {};
+  if (refreshToken) {
+    headers['Authorization'] = `Bearer ${refreshToken}`;
+  }
+  return api.post('/auth/refresh', {}, { headers });
+};
 export const logoutUser = () => api.post('/auth/logout');
 
 // Parking APIs
