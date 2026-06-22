@@ -55,7 +55,11 @@ export default function HostDashboard() {
   const [hostMetrics, setHostMetrics] = useState({
     activeNodes: 0,
     netRevenue: 0,
+    totalEarnings: 0,
+    monthlyEarnings: 0,
     totalBookings: 0,
+    activeSessions: 0,
+    completedSessions: 0,
     occupancyRate: 0,
     mostBookedSpot: "N/A"
   });
@@ -169,10 +173,20 @@ export default function HostDashboard() {
     const refresh = () => loadHostData();
     socketService.subscribe("new_booking", refresh);
     socketService.subscribe("booking_status_changed", refresh);
+    // Fired at checkout specifically — booking_completed updates the Bookings/Active
+    // Vehicles tables, earnings_updated is what makes Total/Monthly Earnings actually
+    // move without the host needing to flip tabs or reload.
+    socketService.subscribe("booking_completed", refresh);
+    socketService.subscribe("earnings_updated", refresh);
+    // Fired when a driver submits a review — refreshes the Reviews tab / average rating.
+    socketService.subscribe("review_submitted", refresh);
 
     return () => {
       socketService.unsubscribe("new_booking", refresh);
       socketService.unsubscribe("booking_status_changed", refresh);
+      socketService.unsubscribe("booking_completed", refresh);
+      socketService.unsubscribe("earnings_updated", refresh);
+      socketService.unsubscribe("review_submitted", refresh);
     };
   }, [user]);
 
@@ -183,7 +197,7 @@ export default function HostDashboard() {
       const [parkingsRes, metricsRes] = await Promise.all([
         fetchHostParkings(user._id).catch(() => ({ data: [] })),
         fetchHostMetrics(user._id).catch(() => ({
-          data: { activeNodes: 0, netRevenue: 0, totalBookings: 0, occupancyRate: 0, mostBookedSpot: "N/A" }
+          data: { activeNodes: 0, netRevenue: 0, totalEarnings: 0, monthlyEarnings: 0, totalBookings: 0, activeSessions: 0, completedSessions: 0, occupancyRate: 0, mostBookedSpot: "N/A" }
         }))
       ]);
 
@@ -360,15 +374,30 @@ export default function HostDashboard() {
               {activeTab === 'overview' && (
                 <div className="space-y-10">
                   {/* Earnings summary strip */}
-                  <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-6 sm:gap-10">
+                  <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-6 sm:gap-10 flex-wrap">
                     <div>
-                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">This Month</span>
-                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">₹{hostMetrics.revenueThisMonth?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</span>
+                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Total Earnings</span>
+                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">₹{hostMetrics.totalEarnings?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</span>
                     </div>
                     <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
                     <div>
-                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Today</span>
-                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">₹{hostMetrics.revenueToday?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</span>
+                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">This Month</span>
+                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">₹{hostMetrics.monthlyEarnings?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</span>
+                    </div>
+                    <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
+                    <div>
+                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Total Bookings</span>
+                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">{hostMetrics.totalBookings || 0}</span>
+                    </div>
+                    <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
+                    <div>
+                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Active Sessions</span>
+                      <span className="text-2xl font-semibold text-accent-600 tabular-nums">{hostMetrics.activeSessions || 0}</span>
+                    </div>
+                    <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
+                    <div>
+                      <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Completed Sessions</span>
+                      <span className="text-2xl font-semibold text-parking-600 tabular-nums">{hostMetrics.completedSessions || 0}</span>
                     </div>
                     <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
                     <div>
@@ -378,7 +407,7 @@ export default function HostDashboard() {
                     <div className="hidden sm:block w-px bg-slate-200 self-stretch"></div>
                     <div>
                       <span className="text-xs uppercase font-semibold text-slate-500 block mb-1">Average Rating</span>
-                      <span className="text-2xl font-semibold text-amber-500 tabular-nums">{hostMetrics.averageRating || 5.0} ⭐</span>
+                      <span className="text-2xl font-semibold text-amber-500 tabular-nums">{hostMetrics.averageRating || 5.0} ⭐ ({hostMetrics.totalReviewCount || 0})</span>
                     </div>
                   </div>
 

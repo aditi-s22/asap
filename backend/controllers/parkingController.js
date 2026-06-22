@@ -248,15 +248,28 @@ exports.getHostMetrics = async (req, res) => {
     const parkingIds = hostParkings.map(p => p._id);
     const totalSlots = hostParkings.reduce((sum, p) => sum + (p.slots || 0), 0);
 
+    // Single source of truth for "this booking represents confirmed, kept revenue":
+    // paymentStatus must actually be "paid" (excludes the unpaid "pending" reservation
+    // window that exists between createBooking and payment/cancellation), and the
+    // booking must not be under dispute or already refunded. Previously this filtered
+    // only on `status: { $nin: ["cancelled", "refunded"] }`, which counted unpaid
+    // "pending" bookings as revenue the moment they were created — so completing the
+    // checkout never visibly changed the numbers, because they were already counted.
+    const PAID_FILTER = {
+      parkingId: { $in: parkingIds },
+      paymentStatus: "paid",
+      status: { $nin: ["refund_pending", "refunded"] }
+    };
+
     // 2. Aggregate Bookings data referencing those parking nodes
     const bookingMetrics = await Booking.aggregate([
-      { $match: { parkingId: { $in: parkingIds }, status: { $nin: ["cancelled", "refunded"] } } },
-      { 
-        $group: { 
-          _id: null, 
+      { $match: PAID_FILTER },
+      {
+        $group: {
+          _id: null,
           totalRevenue: { $sum: "$totalPrice" },
           totalBookings: { $sum: 1 }
-        } 
+        }
       }
     ]);
 
@@ -264,7 +277,7 @@ exports.getHostMetrics = async (req, res) => {
     const bookingsCount = bookingMetrics.length > 0 ? bookingMetrics[0].totalBookings : 0;
     const netRevenue = revenue * 0.9;
 
-    // 3. Occupancy calculation
+    // 3. Occupancy + lifecycle session counts
     const now = new Date();
     const activeBookingsCount = await Booking.countDocuments({
       parkingId: { $in: parkingIds },
@@ -275,9 +288,20 @@ exports.getHostMetrics = async (req, res) => {
 
     const occupancyRate = totalSlots > 0 ? parseFloat(((activeBookingsCount / totalSlots) * 100).toFixed(1)) : 0;
 
+    // Active Sessions (currently on-site, regardless of the time-window check above —
+    // a session that's running late still counts as active) and Completed Sessions.
+    const activeSessions = await Booking.countDocuments({
+      parkingId: { $in: parkingIds },
+      status: { $in: ["checked_in", "active"] }
+    });
+    const completedSessions = await Booking.countDocuments({
+      parkingId: { $in: parkingIds },
+      status: "completed"
+    });
+
     // 4. Most Booked Spot
     const bookingsBySpot = await Booking.aggregate([
-      { $match: { parkingId: { $in: parkingIds }, status: { $nin: ["cancelled", "refunded"] } } },
+      { $match: PAID_FILTER },
       { $group: { _id: "$parkingId", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 1 }
@@ -298,8 +322,7 @@ exports.getHostMetrics = async (req, res) => {
     endOfToday.setHours(23, 59, 59, 999);
 
     const bookingsToday = await Booking.find({
-      parkingId: { $in: parkingIds },
-      status: { $nin: ["cancelled", "refunded"] },
+      ...PAID_FILTER,
       createdAt: { $gte: startOfToday, $lte: endOfToday }
     });
     const revenueToday = bookingsToday.reduce((sum, b) => sum + (b.totalPrice || 0), 0) * 0.9;
@@ -309,23 +332,20 @@ exports.getHostMetrics = async (req, res) => {
     startOfMonth.setHours(0, 0, 0, 0);
 
     const bookingsThisMonth = await Booking.find({
-      parkingId: { $in: parkingIds },
-      status: { $nin: ["cancelled", "refunded"] },
+      ...PAID_FILTER,
       createdAt: { $gte: startOfMonth }
     });
     const revenueThisMonth = bookingsThisMonth.reduce((sum, b) => sum + (b.totalPrice || 0), 0) * 0.9;
 
     // 6. Average Rating
     const ratedSpots = hostParkings.filter(p => p.rating > 0);
-    const averageRating = ratedSpots.length > 0 
+    const averageRating = ratedSpots.length > 0
       ? parseFloat((ratedSpots.reduce((sum, p) => sum + p.rating, 0) / ratedSpots.length).toFixed(1))
       : 0;
+    const totalReviewCount = hostParkings.reduce((sum, p) => sum + (p.reviewCount || 0), 0);
 
     // 7. Peak Booking Hours
-    const allBookings = await Booking.find({
-      parkingId: { $in: parkingIds },
-      status: { $nin: ["cancelled", "refunded"] }
-    });
+    const allBookings = await Booking.find(PAID_FILTER);
     const hoursCount = {};
     allBookings.forEach(b => {
       const hr = new Date(b.startTime).getHours();
@@ -364,13 +384,21 @@ exports.getHostMetrics = async (req, res) => {
 
     res.json({
       activeNodes: activeNodesCount,
+      // netRevenue/revenueToday/revenueThisMonth kept for backward compatibility with
+      // existing dashboard bindings; totalEarnings/monthlyEarnings are the same figures
+      // under the names this audit's spec asks for.
       netRevenue: netRevenue,
+      totalEarnings: netRevenue,
+      monthlyEarnings: revenueThisMonth,
       totalBookings: bookingsCount,
+      activeSessions,
+      completedSessions,
       occupancyRate: occupancyRate,
       mostBookedSpot: mostBookedSpot,
       revenueToday: revenueToday,
       revenueThisMonth: revenueThisMonth,
       averageRating: averageRating || 5.0,
+      totalReviewCount,
       peakBookingHours: peakBookingHours,
       healthScore: healthScore
     });
@@ -499,13 +527,38 @@ exports.addReview = async (req, res) => {
     }
     await booking.save();
 
-    // 4. Recalculate average rating for this parking spot
+    // 4. Recalculate average rating AND review count for this parking spot — both are
+    // derived from the Review collection (the single source of truth), never
+    // incremented/decremented piecemeal, so they can never drift out of sync with the
+    // actual reviews that exist.
     const reviews = await Review.find({ parkingId });
     const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-    
-    await Parking.findByIdAndUpdate(parkingId, { 
-      rating: parseFloat(avgRating.toFixed(1)) 
-    });
+
+    const updatedParking = await Parking.findByIdAndUpdate(parkingId, {
+      rating: parseFloat(avgRating.toFixed(1)),
+      reviewCount: reviews.length
+    }, { new: true });
+
+    // 5. Notify the host that a new review came in.
+    const Notification = require("../models/Notification");
+    if (updatedParking?.hostId) {
+      const hostNotification = await Notification.create({
+        userId: updatedParking.hostId,
+        title: "New Review Received",
+        message: `${req.user.name} rated your spot "${updatedParking.title}" ${rating}★: "${feedback}"`,
+        type: "host_alert"
+      });
+      const io = req.app.get("io");
+      if (io) {
+        io.to(updatedParking.hostId.toString()).emit("notification", hostNotification);
+        io.to(updatedParking.hostId.toString()).emit("review_submitted", {
+          parkingId,
+          rating: Number(rating),
+          averageRating: updatedParking.rating,
+          reviewCount: updatedParking.reviewCount
+        });
+      }
+    }
 
     res.status(201).json(newReview);
   } catch (error) {

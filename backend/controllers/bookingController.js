@@ -374,9 +374,20 @@ exports.checkOutBooking = async (req, res) => {
       type: "review_reminder"
     });
     const io = req.app.get("io");
+    const driverId = booking.userId.toString();
+    const hostId = booking.parkingId.hostId.toString();
     if (io) {
-      io.to(booking.userId.toString()).emit("notification", notification);
-      io.to(booking.userId.toString()).emit("booking_status_changed", { bookingId: booking._id, parkingId: booking.parkingId._id, status: "completed" });
+      io.to(driverId).emit("notification", notification);
+      io.to(driverId).emit("booking_status_changed", { bookingId: booking._id, parkingId: booking.parkingId._id, status: "completed" });
+
+      // Named events per the post-checkout business-metrics spec: booking_completed
+      // (both dashboards should refetch their booking lists), earnings_updated
+      // (host metrics changed — revenue/booking counts now reflect this completed,
+      // paid booking), review_available (driver can now rate this specific booking).
+      io.to(driverId).emit("booking_completed", { bookingId: booking._id, parkingId: booking.parkingId._id });
+      io.to(driverId).emit("review_available", { bookingId: booking._id, parkingId: booking.parkingId._id });
+      io.to(hostId).emit("booking_completed", { bookingId: booking._id, parkingId: booking.parkingId._id });
+      io.to(hostId).emit("earnings_updated", { parkingId: booking.parkingId._id });
     }
 
     res.json({ message: "Check-out completed successfully", booking, durationHours });

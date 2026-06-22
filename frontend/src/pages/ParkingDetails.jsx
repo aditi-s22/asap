@@ -382,7 +382,7 @@ export default function ParkingDetails() {
                  <h2 className="text-lg font-semibold text-slate-900 mb-6 flex items-center gap-2">
                    <span>User Reviews & Ratings</span>
                    <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full font-semibold">
-                     ⭐ {parking.rating || "N/A"}
+                     ⭐ {parking.rating || "N/A"} ({parking.reviewCount || 0} review{parking.reviewCount === 1 ? "" : "s"})
                    </span>
                  </h2>
 

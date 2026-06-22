@@ -56,6 +56,11 @@ const parkingSchema = new mongoose.Schema({
     default: 0
   },
 
+  reviewCount: {
+    type: Number,
+    default: 0
+  },
+
   totalBookings: {
     type: Number,
     default: 0

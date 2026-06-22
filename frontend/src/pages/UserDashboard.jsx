@@ -198,9 +198,17 @@ export default function UserDashboard() {
     const handleStatusChanged = () => loadBookings();
     socketService.subscribe("booking_status_changed", handleStatusChanged);
 
+    // booking_completed / review_available fire specifically at checkout — refetching
+    // here is what makes the "Rate Your Experience" prompt (driven by loadBookings'
+    // own completed-and-unreviewed detection below) appear without a manual reload.
+    socketService.subscribe("booking_completed", handleStatusChanged);
+    socketService.subscribe("review_available", handleStatusChanged);
+
     return () => {
       socketService.unsubscribe("new_booking", handleNewBooking);
       socketService.unsubscribe("booking_status_changed", handleStatusChanged);
+      socketService.unsubscribe("booking_completed", handleStatusChanged);
+      socketService.unsubscribe("review_available", handleStatusChanged);
     };
   }, [user]);
 
