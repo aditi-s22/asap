@@ -9,6 +9,7 @@ import { AuthContext } from '../context/AuthContext';
 import { socketService } from '../services/socket';
 import { normalizeImageUrl } from '../utils/imageHelper';
 import { geocodeAddress } from '../utils/geocode';
+import ListingImageUploader from '../components/ListingImageUploader';
 import {
   fetchHostParkings,
   fetchHostMetrics,
@@ -47,11 +48,17 @@ export default function HostDashboard() {
   // applyForHost / host onboarding; only requires the host to already be verified.
   const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
   const [addSpaceForm, setAddSpaceForm] = useState({
-    title: '', address: '', pricePerHour: '', vehicleType: 'car', slots: '1', startTime: '00:00', endTime: '23:59'
+    title: '', description: '', address: '', pricePerHour: '', vehicleType: 'car', slots: '1', startTime: '00:00', endTime: '23:59', images: []
   });
   const [addSpaceError, setAddSpaceError] = useState('');
   const [addSpaceLoading, setAddSpaceLoading] = useState(false);
   const [addSpacePlaceId, setAddSpacePlaceId] = useState(null);
+
+  // Edit / Resubmit modal (also reused for rejected listings) — Workflow 2 edits.
+  const [editingSpot, setEditingSpot] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
   const [hostMetrics, setHostMetrics] = useState({
     activeNodes: 0,
     netRevenue: 0,
@@ -230,9 +237,13 @@ export default function HostDashboard() {
   const handleAddSpaceSubmit = async (e) => {
     e.preventDefault();
     setAddSpaceError('');
-    const { title, address, pricePerHour, vehicleType, slots, startTime, endTime } = addSpaceForm;
-    if (!title || !address || !pricePerHour || !slots) {
+    const { title, description, address, pricePerHour, vehicleType, slots, startTime, endTime, images } = addSpaceForm;
+    if (!title || !description || !address || !pricePerHour || !slots) {
       setAddSpaceError('Please fill in all required fields.');
+      return;
+    }
+    if (!images || images.length === 0) {
+      setAddSpaceError('At least one parking image is required.');
       return;
     }
     setAddSpaceLoading(true);
@@ -243,6 +254,7 @@ export default function HostDashboard() {
       const geo = await geocodeAddress(address, { placeId: addSpacePlaceId });
       await createParking({
         title,
+        description,
         address: geo.formattedAddress || address,
         latitude: geo.lat,
         longitude: geo.lng,
@@ -253,16 +265,69 @@ export default function HostDashboard() {
         totalSlots: parseInt(slots, 10),
         startTime,
         endTime,
-        images: []
+        images
       });
       setShowAddSpaceModal(false);
-      setAddSpaceForm({ title: '', address: '', pricePerHour: '', vehicleType: 'car', slots: '1', startTime: '00:00', endTime: '23:59' });
+      setAddSpaceForm({ title: '', description: '', address: '', pricePerHour: '', vehicleType: 'car', slots: '1', startTime: '00:00', endTime: '23:59', images: [] });
       setAddSpacePlaceId(null);
       loadHostData();
     } catch (err) {
       setAddSpaceError(err.response?.data?.message || err.message || 'Failed to create listing.');
     } finally {
       setAddSpaceLoading(false);
+    }
+  };
+
+  const openEditModal = (spot) => {
+    setEditingSpot(spot);
+    setEditError('');
+    setEditForm({
+      title: spot.title || '',
+      description: spot.description || '',
+      address: spot.address || '',
+      pricePerHour: spot.pricePerHour || '',
+      vehicleType: spot.vehicleType || 'car',
+      slots: spot.slots || 1,
+      startTime: spot.startTime || '00:00',
+      endTime: spot.endTime || '23:59',
+      images: spot.images || []
+    });
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm || !editingSpot) return;
+    setEditError('');
+    const { title, description, address, pricePerHour, vehicleType, slots, startTime, endTime, images } = editForm;
+    if (!title || !description || !address || !pricePerHour || !slots) {
+      setEditError('Please fill in all required fields.');
+      return;
+    }
+    if (!images || images.length === 0) {
+      setEditError('At least one parking image is required.');
+      return;
+    }
+    setEditLoading(true);
+    try {
+      await updateParkingListing(editingSpot._id, {
+        title,
+        description,
+        address,
+        pricePerHour: parseFloat(pricePerHour),
+        vehicleType,
+        slots: parseInt(slots, 10),
+        totalSlots: parseInt(slots, 10),
+        startTime,
+        endTime,
+        images
+      });
+      setEditingSpot(null);
+      setEditForm(null);
+      loadHostData();
+    } catch (err) {
+      setEditError(err.response?.data?.message || err.message || 'Failed to update listing.');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -557,6 +622,12 @@ export default function HostDashboard() {
                                 <p className="text-slate-500 text-xs truncate mt-0.5">{spot.address}</p>
                               </div>
 
+                              {spot.verificationStatus === 'rejected' && spot.rejectionReason && (
+                                <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                                  <span className="font-semibold">Rejection reason:</span> {spot.rejectionReason}
+                                </div>
+                              )}
+
                               {/* Inline occupancy & earnings, Airbnb-card style */}
                               <div className="flex items-center justify-between text-sm">
                                 <div className="flex items-center gap-1 text-slate-600">
@@ -591,6 +662,12 @@ export default function HostDashboard() {
                                     />
                                     <div className="w-8 h-4 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-parking-500"></div>
                                   </label>
+                                  <button
+                                    onClick={() => openEditModal(spot)}
+                                    className="w-7 h-7 rounded bg-slate-100 hover:bg-parking-50 text-slate-500 hover:text-parking-600 transition-colors flex items-center justify-center"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                                  </button>
                                   <button
                                     onClick={() => handleDeleteListing(spot._id)}
                                     className="w-7 h-7 rounded bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors flex items-center justify-center"
@@ -988,6 +1065,17 @@ export default function HostDashboard() {
             onChange={(e) => setAddSpaceForm(f => ({ ...f, title: e.target.value }))}
             required
           />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">Description</label>
+            <textarea
+              className="w-full input-field rounded-lg px-4 py-3 text-sm"
+              rows={3}
+              placeholder="Describe the parking space — surface type, covered/open, access instructions, etc."
+              value={addSpaceForm.description}
+              onChange={(e) => setAddSpaceForm(f => ({ ...f, description: e.target.value }))}
+              required
+            />
+          </div>
           <Input
             id="add-space-address-input"
             label="Address"
@@ -995,6 +1083,10 @@ export default function HostDashboard() {
             value={addSpaceForm.address}
             onChange={(e) => { setAddSpacePlaceId(null); setAddSpaceForm(f => ({ ...f, address: e.target.value })); }}
             required
+          />
+          <ListingImageUploader
+            images={addSpaceForm.images}
+            onChange={(images) => setAddSpaceForm(f => ({ ...f, images }))}
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -1045,6 +1137,86 @@ export default function HostDashboard() {
             {addSpaceLoading ? 'Submitting…' : 'Submit for Approval'}
           </Button>
         </form>
+      </Modal>
+
+      {/* EDIT / RESUBMIT LISTING — also used by hosts to fix a rejected listing and resend it for review. */}
+      <Modal isOpen={!!editingSpot} onClose={() => { setEditingSpot(null); setEditForm(null); }} title="Edit Listing">
+        {editForm && (
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            {editingSpot?.verificationStatus === 'rejected' && editingSpot?.rejectionReason && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                <span className="font-semibold">Why it was rejected:</span> {editingSpot.rejectionReason}
+              </div>
+            )}
+            {editError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{editError}</div>
+            )}
+            <Input
+              label="Title"
+              value={editForm.title}
+              onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))}
+              required
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Description</label>
+              <textarea
+                className="w-full input-field rounded-lg px-4 py-3 text-sm"
+                rows={3}
+                value={editForm.description}
+                onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                required
+              />
+            </div>
+            <Input
+              label="Address"
+              value={editForm.address}
+              onChange={(e) => setEditForm(f => ({ ...f, address: e.target.value }))}
+              required
+            />
+            <ListingImageUploader
+              images={editForm.images}
+              onChange={(images) => setEditForm(f => ({ ...f, images }))}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Price per hour (₹)"
+                type="number"
+                min="1"
+                value={editForm.pricePerHour}
+                onChange={(e) => setEditForm(f => ({ ...f, pricePerHour: e.target.value }))}
+                required
+              />
+              <Input
+                label="Slots"
+                type="number"
+                min="1"
+                value={editForm.slots}
+                onChange={(e) => setEditForm(f => ({ ...f, slots: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Open Time"
+                type="time"
+                value={editForm.startTime}
+                onChange={(e) => setEditForm(f => ({ ...f, startTime: e.target.value }))}
+              />
+              <Input
+                label="Close Time"
+                type="time"
+                value={editForm.endTime}
+                onChange={(e) => setEditForm(f => ({ ...f, endTime: e.target.value }))}
+              />
+            </div>
+            {editingSpot?.verificationStatus === 'rejected' && (
+              <p className="text-xs text-slate-400">Saving will resubmit this listing for admin review.</p>
+            )}
+            <Button type="submit" variant="primary" className="w-full" disabled={editLoading}>
+              {editLoading ? 'Saving…' : (editingSpot?.verificationStatus === 'rejected' ? 'Resubmit for Approval' : 'Save Changes')}
+            </Button>
+          </form>
+        )}
       </Modal>
     </div>
   );

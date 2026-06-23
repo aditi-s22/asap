@@ -79,6 +79,7 @@ const schemas = {
   },
   addParking: {
     title: { required: true, type: "string" },
+    description: { required: true, type: "string" },
     address: { required: true, type: "string" },
     latitude: { required: true, type: "number" },
     longitude: { required: true, type: "number" },
@@ -94,7 +95,15 @@ const schemas = {
       custom: (val) => val <= 0 ? "slots must be at least 1." : null
     },
     startTime: { required: true, type: "string", regex: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/ },
-    endTime: { required: true, type: "string", regex: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/ }
+    endTime: { required: true, type: "string", regex: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/ },
+    images: {
+      required: true,
+      custom: (val) => {
+        if (!Array.isArray(val) || val.length === 0) return "At least one parking image is required";
+        if (val.length > 10) return "Maximum 10 images allowed";
+        return null;
+      }
+    }
   },
   createBooking: {
     parkingId: { 

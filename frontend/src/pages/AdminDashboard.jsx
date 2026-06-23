@@ -140,10 +140,32 @@ export default function AdminDashboard() {
     }
   };
 
-  // Reject Listing
-  const handleRejectSpot = async (spotId) => {
+  // Reject Listing — admin must pick (or type) a reason before confirming, so the
+  // host knows exactly what to fix (e.g. blank/stock/duplicate/mismatched photo).
+  const REJECTION_REASON_PRESETS = [
+    "Parking space image not visible",
+    "Please upload clearer photos",
+    "Uploaded image does not show the parking area",
+    "Duplicate image detected",
+    "Image appears to be a stock photo, not the actual space",
+    "Image does not match the listed address/location"
+  ];
+  const [rejectDraft, setRejectDraft] = useState({});
+
+  const openRejectPicker = (spotId) => {
+    setRejectDraft((d) => ({ ...d, [spotId]: { open: true, reason: REJECTION_REASON_PRESETS[0] } }));
+  };
+  const cancelRejectPicker = (spotId) => {
+    setRejectDraft((d) => ({ ...d, [spotId]: { open: false, reason: "" } }));
+  };
+  const setRejectReason = (spotId, reason) => {
+    setRejectDraft((d) => ({ ...d, [spotId]: { ...d[spotId], reason } }));
+  };
+
+  const handleRejectSpot = async (spotId, reason) => {
     try {
-      await rejectParking(spotId);
+      await rejectParking(spotId, reason);
+      setRejectDraft((d) => ({ ...d, [spotId]: { open: false, reason: "" } }));
       loadAdminData();
     } catch (err) {
       alert("Failed to reject listing.");
@@ -532,13 +554,27 @@ export default function AdminDashboard() {
                     <Card className="p-10 text-center text-slate-400 text-sm">No parking listings awaiting approval.</Card>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {listings.pending.filter(s => matchesSearch(s.title) || matchesSearch(s.address)).map(spot => (
+                      {listings.pending.filter(s => matchesSearch(s.title) || matchesSearch(s.address)).map(spot => {
+                        const draft = rejectDraft[spot._id] || { open: false, reason: "" };
+                        return (
                         <Card key={spot._id} className="overflow-hidden flex flex-col">
                           {spot.images?.[0]?.url ? (
-                            <img src={normalizeImageUrl(spot.images[0])} alt={spot.title} className="w-full h-48 object-cover" />
+                            <img src={normalizeImageUrl(spot.images[0])} alt={spot.title} className="w-full h-56 object-cover" />
                           ) : (
-                            <div className="w-full h-48 bg-slate-100 flex items-center justify-center text-slate-400">
+                            <div className="w-full h-56 bg-slate-100 flex items-center justify-center text-slate-400">
                               <span className="material-symbols-outlined text-3xl">image_not_supported</span>
+                            </div>
+                          )}
+                          {spot.images?.length > 1 && (
+                            <div className="flex gap-1.5 p-2 bg-slate-50 overflow-x-auto">
+                              {spot.images.slice(1).map((img, i) => (
+                                <img
+                                  key={img.public_id || i}
+                                  src={normalizeImageUrl(img)}
+                                  alt={`${spot.title} ${i + 2}`}
+                                  className="w-16 h-16 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+                                />
+                              ))}
                             </div>
                           )}
                           <div className="p-5 flex-1 flex flex-col gap-3">
@@ -546,9 +582,16 @@ export default function AdminDashboard() {
                               <h3 className="font-semibold text-slate-900">{spot.title}</h3>
                               <span className="font-semibold text-slate-900 tabular-nums whitespace-nowrap">₹{spot.pricePerHour}/hr</span>
                             </div>
+                            {spot.description && (
+                              <p className="text-sm text-slate-600 leading-relaxed">{spot.description}</p>
+                            )}
                             <div className="text-sm text-slate-500 flex items-start gap-1.5">
                               <span className="material-symbols-outlined text-[16px] mt-0.5 flex-shrink-0">location_on</span>
                               {spot.address}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                              <span className="material-symbols-outlined text-[16px]">grid_view</span>
+                              {spot.slots} slots
                             </div>
                             <div className="text-xs text-slate-400 tabular-nums">
                               Coordinates: {spot.location?.coordinates?.[1]?.toFixed(4)}, {spot.location?.coordinates?.[0]?.toFixed(4)}
@@ -560,13 +603,41 @@ export default function AdminDashboard() {
                               <span className="font-medium text-slate-700">{spot.host?.name || "Unknown host"}</span>
                               <span className="text-slate-400">{spot.host?.email}</span>
                             </div>
-                            <div className="flex gap-2 mt-auto pt-2">
-                              <button onClick={() => handleApproveSpot(spot._id)} className="flex-1 px-3 py-2 bg-parking-600 text-white rounded-lg hover:bg-parking-700 text-sm font-semibold transition-colors">Approve</button>
-                              <button onClick={() => handleRejectSpot(spot._id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white text-sm font-semibold transition-colors">Reject</button>
-                            </div>
+
+                            {draft.open ? (
+                              <div className="mt-auto pt-2 flex flex-col gap-2">
+                                <select
+                                  className="w-full input-field rounded-lg px-3 py-2 text-sm"
+                                  value={draft.reason}
+                                  onChange={(e) => setRejectReason(spot._id, e.target.value)}
+                                >
+                                  {REJECTION_REASON_PRESETS.map((preset) => (
+                                    <option key={preset} value={preset}>{preset}</option>
+                                  ))}
+                                  <option value="">Other (type below)</option>
+                                </select>
+                                <textarea
+                                  className="w-full input-field rounded-lg px-3 py-2 text-sm"
+                                  rows={2}
+                                  placeholder="Or type a custom reason for the host..."
+                                  value={REJECTION_REASON_PRESETS.includes(draft.reason) ? "" : draft.reason}
+                                  onChange={(e) => setRejectReason(spot._id, e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                  <button onClick={() => cancelRejectPicker(spot._id)} className="flex-1 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 text-sm font-semibold transition-colors">Cancel</button>
+                                  <button onClick={() => handleRejectSpot(spot._id, draft.reason)} className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold transition-colors">Confirm Reject</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 mt-auto pt-2">
+                                <button onClick={() => handleApproveSpot(spot._id)} className="flex-1 px-3 py-2 bg-parking-600 text-white rounded-lg hover:bg-parking-700 text-sm font-semibold transition-colors">Approve</button>
+                                <button onClick={() => openRejectPicker(spot._id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white text-sm font-semibold transition-colors">Reject</button>
+                              </div>
+                            )}
                           </div>
                         </Card>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

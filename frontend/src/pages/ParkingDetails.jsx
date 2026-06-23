@@ -268,6 +268,19 @@ export default function ParkingDetails() {
             </div>
           </div>
 
+          {parking.images?.length > 3 && (
+            <div className="flex gap-3 overflow-x-auto pb-2 mb-8 -mt-4">
+              {parking.images.slice(3).map((img, i) => (
+                <img
+                  key={img.public_id || i}
+                  src={normalizeImageUrl(img)}
+                  alt={`${parking.title} photo ${i + 4}`}
+                  className="w-28 h-20 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+                />
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col lg:flex-row gap-10">
             {/* Left Content Column */}
             <div className="flex-1 space-y-10">

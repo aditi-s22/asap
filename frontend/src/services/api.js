@@ -116,7 +116,7 @@ export const getAdminUsers = () => api.get('/admin/users');
 export const toggleUserStatus = (id) => api.patch(`/admin/users/${id}/status`);
 export const getAdminListings = () => api.get('/admin/listings');
 export const approveParking = (id) => api.patch(`/admin/parking/${id}/approve`);
-export const rejectParking = (id) => api.patch(`/admin/parking/${id}/reject`);
+export const rejectParking = (id, reason) => api.patch(`/admin/parking/${id}/reject`, { reason });
 export const suspendParking = (id) => api.patch(`/admin/parking/${id}/suspend`);
 export const unsuspendParking = (id) => api.patch(`/admin/parking/${id}/unsuspend`);
 export const deleteParking = (id) => api.delete(`/admin/parking/${id}`);

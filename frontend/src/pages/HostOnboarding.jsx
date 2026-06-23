@@ -20,7 +20,7 @@ export default function HostOnboarding() {
     name: '', phone: '', email: '',
     govIdType: 'Aadhaar Card', govIdNumber: '', govIdImage: '',
     address: '', addressProofType: 'Utility Bill', addressProofImage: '',
-    title: '', vehicleType: 'car', slots: '1', pricePerHour: '50',
+    title: '', description: '', vehicleType: 'car', slots: '1', pricePerHour: '50',
     startTime: '08:00', endTime: '22:00', parkingImage: ''
   });
 
@@ -87,8 +87,8 @@ export default function HostOnboarding() {
       setError('Please provide your space address and upload a valid Address Proof.');
       return;
     }
-    if (step === 4 && (!formData.title || !formData.parkingImage)) {
-      setError('Please enter a listing title and upload a photo of the parking space.');
+    if (step === 4 && (!formData.title || !formData.description || !formData.parkingImage)) {
+      setError('Please enter a listing title, description, and upload a photo of the parking space.');
       return;
     }
     setError('');
@@ -176,6 +176,7 @@ export default function HostOnboarding() {
         // in the dashboard instead of this onboarding form.
         await createParking({
           title: formData.title,
+          description: formData.description,
           address: geo.formattedAddress || formData.address,
           latitude,
           longitude,
@@ -384,6 +385,19 @@ export default function HostOnboarding() {
                       <p className="text-slate-500 mb-6">Configure capacity slots, hourly rates, and photos of your actual space.</p>
 
                       <Input label="Listing Title" name="title" icon="title" placeholder="Secure driveway in Indiranagar Double Road" value={formData.title} onChange={handleChange} required />
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-slate-700">Description</label>
+                        <textarea
+                          name="description"
+                          className="w-full input-field rounded-lg px-4 py-3 text-sm"
+                          rows={3}
+                          placeholder="Describe the parking space — surface type, covered/open, access instructions, etc."
+                          value={formData.description}
+                          onChange={handleChange}
+                          required
+                        />
+                      </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">

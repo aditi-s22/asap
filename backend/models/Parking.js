@@ -7,6 +7,11 @@ const parkingSchema = new mongoose.Schema({
     required: true
   },
 
+  description: {
+    type: String,
+    required: true
+  },
+
   address: {
     type: String,
     required: true
@@ -81,16 +86,27 @@ const parkingSchema = new mongoose.Schema({
     default: "23:59"
   },
 
-  images: [{
-    url: {
-      type: String,
-      required: true
-    },
-    public_id: {
-      type: String,
-      required: true
+  images: {
+    type: [{
+      url: {
+        type: String,
+        required: true
+      },
+      public_id: {
+        type: String,
+        required: true
+      }
+    }],
+    validate: {
+      validator: (v) => Array.isArray(v) && v.length > 0,
+      message: "At least one parking image is required"
     }
-  }],
+  },
+
+  rejectionReason: {
+    type: String,
+    default: null
+  },
 
   hostId: {
     type: mongoose.Schema.Types.ObjectId,

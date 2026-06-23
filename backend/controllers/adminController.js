@@ -112,6 +112,7 @@ exports.approveParkingListing = async (req, res) => {
     parking.isApproved = true;
     parking.verificationStatus = "approved";
     parking.isActive = true;
+    parking.rejectionReason = null;
     await parking.save();
 
     console.log(`[Listing Approved] ID: ${parking._id} | Title: "${parking.title}" | Host: ${parking.hostId}`);
@@ -226,18 +227,23 @@ exports.rejectParkingListing = async (req, res) => {
       return res.status(404).json({ message: "Parking spot not found" });
     }
 
+    const { reason } = req.body;
+
     parking.isApproved = false;
     parking.verificationStatus = "rejected";
     parking.isActive = false;
+    parking.rejectionReason = reason || null;
     await parking.save();
 
-    console.log(`[Listing Rejected] ID: ${parking._id} | Title: "${parking.title}" | Host: ${parking.hostId}`);
+    console.log(`[Listing Rejected] ID: ${parking._id} | Title: "${parking.title}" | Host: ${parking.hostId} | Reason: ${reason || "none given"}`);
 
     // Notify Host
     await Notification.create({
       userId: parking.hostId,
       title: "Parking Listing Rejected",
-      message: `Your parking listing for "${parking.title}" has been rejected. Please review coordinates, address, and pricing before re-submitting.`,
+      message: reason
+        ? `Your parking listing for "${parking.title}" has been rejected. Reason: ${reason}. You can edit your listing and resubmit it for review.`
+        : `Your parking listing for "${parking.title}" has been rejected. Please review coordinates, address, and pricing before re-submitting.`,
       type: "host_alert"
     });
 

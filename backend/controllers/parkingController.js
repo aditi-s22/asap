@@ -37,10 +37,11 @@ exports.addParking = async (req, res) => {
       return res.status(403).json({ message: "You must complete host verification before creating a listing." });
     }
 
-    const { title, address, latitude, longitude, pricePerHour, vehicleType, slots, startTime, endTime, images } = req.body;
+    const { title, description, address, latitude, longitude, pricePerHour, vehicleType, slots, startTime, endTime, images } = req.body;
 
     const parking = await Parking.create({
       title,
+      description,
       address,
       pricePerHour,
       vehicleType,
@@ -187,7 +188,7 @@ exports.getHostParkings = async (req, res) => {
 
 // Fields a host is allowed to self-edit. Approval/verification/rating/etc. are server/admin-controlled only.
 const UPDATABLE_PARKING_FIELDS = [
-  "title", "address", "pricePerHour", "vehicleType",
+  "title", "description", "address", "pricePerHour", "vehicleType",
   "slots", "totalSlots", "availableSlots", "startTime", "endTime",
   "images", "isActive"
 ];
@@ -206,6 +207,15 @@ exports.updateParking = async (req, res) => {
     const updates = {};
     for (const field of UPDATABLE_PARKING_FIELDS) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+
+    // A host editing a rejected listing is resubmitting it — send it back into
+    // the moderation queue rather than leaving it stuck in "rejected".
+    if (parking.verificationStatus === "rejected") {
+      updates.verificationStatus = "pending";
+      updates.isApproved = false;
+      updates.isActive = false;
+      updates.rejectionReason = null;
     }
 
     parking = await Parking.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
